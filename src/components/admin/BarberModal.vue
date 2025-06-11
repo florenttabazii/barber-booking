@@ -30,6 +30,31 @@
           </small>
         </div>
 
+        <!-- Slot Interval Picker -->
+        <div class="mb-2">
+          <label class="form-label">Slot Interval (minutes)</label>
+          <select v-model="form.slot_interval_minutes" class="form-select">
+            <option disabled value="">Select interval</option>
+            <option v-for="interval in [10, 15, 20, 30, 60]" :key="interval" :value="interval">
+              {{ interval }} minutes
+            </option>
+          </select>
+        </div>
+
+        <!-- Weekly Working Hours -->
+        <div class="mb-3">
+          <label class="form-label">Working Hours Per Day</label>
+          <div
+            v-for="(day, index) in weekdays"
+            :key="index"
+            class="d-flex align-items-center gap-2 mb-2"
+          >
+            <span class="w-25">{{ day.label }}</span>
+            <input type="time" class="form-control" v-model="day.start_time" />
+            <input type="time" class="form-control" v-model="day.end_time" />
+          </div>
+        </div>
+
         <div class="d-flex justify-content-between mt-4">
           <button class="btn btn-secondary" @click="$emit('close')">Cancel</button>
           <button class="btn btn-dark" @click="submitBarber" :disabled="wordCount < 45">
@@ -55,12 +80,23 @@ const emit = defineEmits(['close', 'save'])
 const fields = [
   { key: 'name', label: 'First Name', placeholder: 'Enter name', type: 'text' },
   { key: 'surname', label: 'Surname', placeholder: 'Enter surname', type: 'text' },
-  { key: 'phone_number', label: 'Phone Number', placeholder: 'Enter phone number', type: 'text' },
   { key: 'experience', label: 'Experience', placeholder: 'Years of experience', type: 'number' },
   { key: 'rating', label: 'Rating', placeholder: 'Barber rating', type: 'number' },
   { key: 'total_clients', label: 'Total Clients', placeholder: 'Total clients', type: 'number' },
   { key: 'avatar_url', label: 'Avatar URL', placeholder: 'Link to avatar image', type: 'text' },
+  { key: 'phone_number', label: 'Phone Number', placeholder: 'Enter phone number', type: 'text' },
 ]
+
+// Weekday setup (Sunday = 0)
+const weekdays = ref([
+  { label: 'Su', weekday: 0, start_time: '', end_time: '' },
+  { label: 'Mo', weekday: 1, start_time: '', end_time: '' },
+  { label: 'Tu', weekday: 2, start_time: '', end_time: '' },
+  { label: 'We', weekday: 3, start_time: '', end_time: '' },
+  { label: 'Th', weekday: 4, start_time: '', end_time: '' },
+  { label: 'Fr', weekday: 5, start_time: '', end_time: '' },
+  { label: 'Sa', weekday: 6, start_time: '', end_time: '' },
+])
 
 const form = ref({
   name: '',
@@ -72,6 +108,7 @@ const form = ref({
   avatar_url: '',
   description: '',
   is_active: true,
+  slot_interval_minutes: null,
 })
 
 const resetForm = () => {
@@ -90,9 +127,32 @@ const resetForm = () => {
 
 watch(
   () => props.barber,
-  (val) => {
+  async (val) => {
     if (val && props.isEdit) {
       form.value = { ...val }
+
+      // 🕒 Load working hours for this barber
+      const { data, error } = await supabase
+        .from('barber_working_hours')
+        .select('weekday, start_time, end_time')
+        .eq('barber_id', val.id)
+
+      if (data) {
+        // Clear first
+        weekdays.value.forEach((day) => {
+          day.start_time = ''
+          day.end_time = ''
+        })
+
+        // Populate with existing data
+        data.forEach((entry) => {
+          const day = weekdays.value.find((d) => d.weekday === entry.weekday)
+          if (day) {
+            day.start_time = entry.start_time
+            day.end_time = entry.end_time
+          }
+        })
+      }
     } else {
       resetForm()
     }
@@ -104,14 +164,38 @@ const wordCount = computed(() => form.value.description.trim().split(/\s+/).filt
 
 const submitBarber = async () => {
   const payload = { ...form.value }
+  delete payload.id
+
   let error = null
 
   if (props.isEdit && props.barber?.id) {
     const res = await supabase.from('barbers').update(payload).eq('id', props.barber.id)
     error = res.error
-  } else {
-    const res = await supabase.from('barbers').insert([payload])
-    error = res.error
+
+    if (!error) {
+      // 🔄 Replace working hours
+      const barberId = props.barber.id
+
+      // 1. Delete old working hours
+      await supabase.from('barber_working_hours').delete().eq('barber_id', barberId)
+
+      // 2. Insert new working hours
+      const hoursToInsert = weekdays.value
+        .filter((d) => d.start_time && d.end_time)
+        .map((d) => ({
+          barber_id: barberId,
+          weekday: d.weekday,
+          start_time: d.start_time,
+          end_time: d.end_time,
+        }))
+
+      if (hoursToInsert.length > 0) {
+        const whRes = await supabase.from('barber_working_hours').insert(hoursToInsert)
+        if (whRes.error) {
+          alert('Working hours update failed: ' + whRes.error.message)
+        }
+      }
+    }
   }
 
   if (error) {

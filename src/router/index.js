@@ -68,6 +68,12 @@ const router = createRouter({
       component: () => import('@/views/admin/SystemStatus.vue'),
       meta: { requiresAuth: true },
     },
+    // In src/router/index.js, change to:
+    {
+      path: '/test-algorithm',
+      name: 'test-algorithm',
+      component: () => import('../views/TestAlgorithm.vue'), // ← Changed from components to views
+    },
   ],
 })
 

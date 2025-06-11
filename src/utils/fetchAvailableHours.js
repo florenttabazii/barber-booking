@@ -1,8 +1,6 @@
-// ✅ fetchAvailableHours.js
 import { supabase } from '@/supabaseClient'
 
-export async function fetchAvailableHours(barberId, date) {
-  // STEP 1: Fetch base hours from time_slots table
+export async function fetchAvailableHours(barberId, date, totalDuration, intervalMinutes) {
   const { data: slotData, error: slotError } = await supabase
     .from('time_slots')
     .select('slots')
@@ -10,12 +8,11 @@ export async function fetchAvailableHours(barberId, date) {
 
   if (slotError || !slotData?.slots) {
     console.error('Failed to fetch global time slots:', slotError)
-    return [] // return nothing if base slots can't load
+    return []
   }
 
   const baseHours = slotData.slots
 
-  // STEP 2: Fetch taken hours from availability table
   const { data: takenData, error: takenError } = await supabase
     .from('availability')
     .select('hour')
@@ -23,13 +20,30 @@ export async function fetchAvailableHours(barberId, date) {
     .eq('date', date)
     .eq('is_available', false)
 
-  if (takenError) {
-    console.error('Failed to fetch blocked hours:', takenError)
-    return baseHours // fallback: return all slots as available
+  const takenHours = takenError ? [] : takenData.map((item) => item.hour)
+
+  const now = new Date()
+  const selectedDate = new Date(date)
+  const isToday = now.toDateString() === selectedDate.toDateString()
+
+  const slotsNeeded = Math.ceil(totalDuration / intervalMinutes)
+  const availableSlots = []
+
+  for (let i = 0; i < baseHours.length; i++) {
+    const chunk = baseHours.slice(i, i + slotsNeeded)
+
+    if (chunk.length < slotsNeeded) continue
+    if (chunk.some((slot) => takenHours.includes(slot))) continue
+
+    if (isToday) {
+      const [h, m] = baseHours[i].split(':').map(Number)
+      const slotTime = new Date(date)
+      slotTime.setHours(h, m, 0, 0)
+      if (slotTime <= now) continue
+    }
+
+    availableSlots.push(baseHours[i])
   }
 
-  const takenHours = takenData.map((item) => item.hour)
-
-  // STEP 3: Filter out unavailable times
-  return baseHours.filter((hour) => !takenHours.includes(hour))
+  return availableSlots
 }
