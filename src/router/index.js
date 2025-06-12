@@ -19,15 +19,16 @@ const router = createRouter({
       component: () => import('../views/BarberSelection.vue'),
     },
     {
-      path: '/booking/form',
-      name: 'booking-form',
-      component: () => import('../views/BookingForm.vue'),
-    },
-    {
       path: '/booking/services',
       name: 'service-selection',
       component: () => import('../views/ServiceSelection.vue'),
     },
+    {
+      path: '/booking/form',
+      name: 'booking-form',
+      component: () => import('../views/BookingForm.vue'),
+    },
+
     {
       path: '/booking/confirmation',
       name: 'booking-confirmation',
@@ -68,12 +69,6 @@ const router = createRouter({
       component: () => import('@/views/admin/SystemStatus.vue'),
       meta: { requiresAuth: true },
     },
-    // In src/router/index.js, change to:
-    {
-      path: '/test-algorithm',
-      name: 'test-algorithm',
-      component: () => import('../views/TestAlgorithm.vue'), // ← Changed from components to views
-    },
   ],
 })
 
@@ -83,8 +78,8 @@ router.beforeEach(async (to, from, next) => {
 
   const routeStepMap = {
     'barber-selection': 1,
-    'booking-form': 2,
-    'service-selection': 3,
+    'service-selection': 2,
+    'booking-form': 3,
     'booking-confirmation': 4,
   }
 

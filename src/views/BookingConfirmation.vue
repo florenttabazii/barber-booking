@@ -37,13 +37,13 @@
                 <tr v-for="service in selectedServicesDetails" :key="service.id">
                   <td>{{ service.name }}</td>
                   <td>{{ service.duration }}</td>
-                  <td>${{ service.price }}</td>
+                  <td>{{ service.price }} CH₣</td>
                 </tr>
               </tbody>
               <tfoot>
                 <tr class="fw-bold">
                   <td colspan="2">Total</td>
-                  <td>${{ totalPrice }}</td>
+                  <td>{{ totalPrice }} CH₣</td>
                 </tr>
               </tfoot>
             </table>
@@ -94,6 +94,7 @@ import { useBookingStore } from '../stores/booking'
 import { useBarbersStore } from '../stores/barbers'
 import { useServicesStore } from '../stores/services'
 import PrivacyPolicyModal from '@/components/PrivacyPolicyModal.vue'
+import { supabase } from '@/supabaseClient'
 
 export default defineComponent({
   name: 'BookingConfirmation',
@@ -124,20 +125,68 @@ export default defineComponent({
     const totalPrice = computed(() => servicesStore.totalPrice)
 
     const goBack = () => {
-      router.push('/booking/services')
+      router.push('/booking/form')
     }
 
     const onPrivacyAccepted = (isAccepted) => {
       privacyAccepted.value = isAccepted
     }
 
-    const confirmBooking = () => {
-      // Generate booking ID and save
+    const confirmBooking = async () => {
+      const { date, timeSlot, barber_id } = booking.value
+      const totalDuration = selectedServicesDetails.value.reduce((sum, s) => sum + s.duration, 0)
+
+      // 1️⃣ Fetch barber's interval
+      const { data: barberData, error: barberError } = await supabase
+        .from('barbers')
+        .select('slot_interval_minutes')
+        .eq('id', barber_id)
+        .single()
+
+      if (barberError || !barberData) {
+        console.error('❌ Could not fetch barber interval:', barberError)
+        return
+      }
+
+      const interval = barberData.slot_interval_minutes || 15
+
+      // 2️⃣ Generate time slots to block
+      const markUnavailableSlots = (startTime, durationMinutes, intervalMinutes) => {
+        const slots = []
+        const start = new Date(`2000-01-01T${startTime}:00`)
+        const totalSlots = Math.ceil(durationMinutes / intervalMinutes)
+
+        for (let i = 0; i < totalSlots; i++) {
+          const slot = new Date(start.getTime() + i * intervalMinutes * 60000)
+          const formatted = slot.toTimeString().slice(0, 5)
+          slots.push(formatted)
+        }
+
+        return slots
+      }
+
+      const slotsToBlock = markUnavailableSlots(timeSlot, totalDuration, interval)
+
+      // 3️⃣ Insert into availability table
+      const rows = slotsToBlock.map((hour) => ({
+        barber_id,
+        date,
+        hour,
+        is_available: false,
+      }))
+
+      const { error: insertError } = await supabase.from('availability').insert(rows)
+
+      if (insertError) {
+        console.error('❌ Failed to block time slots:', insertError)
+      } else {
+        console.log('✅ Blocked slots:', rows)
+      }
+
+      // 4️⃣ Save the booking
       bookingStore.confirmBooking()
       bookingStore.toggleConfirmationModal(true)
 
-      // Show the confirmation modal
-      // We need to access the modal component from the root
       const modalComponent = instance.appContext.app._instance.refs.confirmationModal
       if (modalComponent && modalComponent.showModal) {
         modalComponent.showModal()

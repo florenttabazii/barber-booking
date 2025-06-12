@@ -19,15 +19,15 @@
             </div>
             <div class="col-3">
               <div class="step-indicator" :class="getStepClass(2)">
-                <i class="fas fa-calendar"></i>
-              </div>
-              <small class="d-block mt-2">Booking</small>
-            </div>
-            <div class="col-3">
-              <div class="step-indicator" :class="getStepClass(3)">
                 <i class="fas fa-dollar-sign"></i>
               </div>
               <small class="d-block mt-2">Services</small>
+            </div>
+            <div class="col-3">
+              <div class="step-indicator" :class="getStepClass(3)">
+                <i class="fas fa-calendar"></i>
+              </div>
+              <small class="d-block mt-2">Booking</small>
             </div>
             <div class="col-3">
               <div class="step-indicator" :class="getStepClass(4)">

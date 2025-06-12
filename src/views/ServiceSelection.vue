@@ -29,7 +29,7 @@
               <div class="col-md-6 text-center">
                 <div class="card bg-light mx-auto" style="max-width: 300px">
                   <div class="card-body">
-                    <h4 class="mb-1">Total: ${{ totalPrice }}</h4>
+                    <h4 class="mb-1">Total: {{ totalPrice }} CH₣</h4>
                     <small class="text-muted">
                       {{ selectedServicesCount }} service(s) selected
                     </small>
@@ -84,7 +84,7 @@ export default defineComponent({
     )
 
     const goBack = () => {
-      router.push('/booking/form')
+      router.push('/booking/barber-selection')
     }
 
     const validateAndContinue = () => {
@@ -92,7 +92,7 @@ export default defineComponent({
         bookingStore.showValidation('Please select at least one service.')
         return
       }
-      router.push('/booking/confirmation')
+      router.push('/booking/form')
     }
 
     return {

@@ -3,7 +3,7 @@
     <h5>{{ service.name }}</h5>
     <p class="text-muted small">{{ service.description }}</p>
     <div class="d-flex justify-content-between">
-      <span class="text-success fw-bold">${{ service.price }}</span>
+      <span class="text-success fw-bold">{{ service.price }}CH₣</span>
       <span class="text-muted">{{ service.duration }} min</span>
     </div>
   </div>

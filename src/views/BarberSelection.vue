@@ -44,7 +44,7 @@ export default defineComponent({
         alert('Please select a barber to continue.')
         return
       }
-      router.push('/booking/form')
+      router.push('/booking/services')
     }
 
     return {

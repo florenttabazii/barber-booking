@@ -56,9 +56,9 @@ export default defineComponent({
         case 1:
           return 'Choose Your Barber'
         case 2:
-          return 'Book Your Appointment'
-        case 3:
           return 'Select Services'
+        case 3:
+          return 'Book Your Appointment'
         case 4:
           return 'Confirm Your Booking'
         default:

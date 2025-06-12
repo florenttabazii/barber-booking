@@ -6,6 +6,7 @@
           <h3 class="mb-0"><i class="fas fa-calendar me-2"></i>Book Your Appointment</h3>
         </div>
         <div class="card-body">
+          <!-- Personal Information -->
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">First Name *</label>
@@ -38,18 +39,22 @@
             </div>
           </div>
 
+          <!-- Datepicker -->
           <div class="mb-3">
             <label class="form-label">Select Date *</label>
-            <input
-              type="date"
-              class="form-control"
+            <Datepicker
               v-model="booking.date"
-              @change="loadSlots"
-              :min="minDate"
-              required
+              :min-date="new Date()"
+              :max-date="maxDate"
+              :disabled-dates="fullyBookedDates"
+              :format="'dd.MM.yyyy'"
+              auto-apply
+              placeholder="Select a date"
+              @update:model-value="loadSlots"
             />
           </div>
 
+          <!-- Time Slots -->
           <div v-if="booking.date" class="mb-3">
             <label class="form-label">Available Time Slots *</label>
             <div v-if="availableSlots.length === 0" class="alert alert-warning">
@@ -73,6 +78,7 @@
             </div>
           </div>
 
+          <!-- Navigation Buttons -->
           <div class="d-flex justify-content-between">
             <button type="button" class="btn btn-secondary" @click="goBack">
               <i class="fas fa-arrow-left me-2"></i>Back
@@ -83,8 +89,8 @@
               :class="{ 'btn-success': isFormComplete }"
               @click="validateAndContinue"
             >
-              <span v-if="isFormComplete"> Continue<i class="fas fa-arrow-right ms-2"></i> </span>
-              <span v-else> Complete Form<i class="fas fa-exclamation ms-2"></i> </span>
+              <span v-if="isFormComplete">Continue <i class="fas fa-arrow-right ms-2"></i></span>
+              <span v-else>Complete Form <i class="fas fa-exclamation ms-2"></i></span>
             </button>
           </div>
         </div>
@@ -94,142 +100,115 @@
 </template>
 
 <script>
-import { defineComponent, computed, ref, watch } from 'vue'
+import { defineComponent, computed, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '../stores/booking'
 import TimeSlot from '../components/TimeSlot.vue'
 import { fetchAvailableHours } from '@/utils/fetchAvailableHours'
+import Datepicker from '@vuepic/vue-datepicker'
+import '@vuepic/vue-datepicker/dist/main.css'
+import { supabase } from '@/supabaseClient'
 
 export default defineComponent({
   name: 'BookingForm',
-  components: {
-    TimeSlot,
-  },
+  components: { TimeSlot, Datepicker },
   setup() {
     const router = useRouter()
     const bookingStore = useBookingStore()
 
     const booking = computed({
       get: () => bookingStore.booking,
-      set: (value) => {
-        Object.keys(value).forEach((key) => {
-          bookingStore.updateBookingField(key, value[key])
-        })
-      },
+      set: (val) => Object.entries(val).forEach(([k, v]) => bookingStore.updateBookingField(k, v)),
     })
 
     const availableSlots = computed(() => bookingStore.availableSlots)
-    const minDate = computed(() => bookingStore.minDate)
     const isFormComplete = computed(() => bookingStore.isBookingFormComplete)
-
+    const minDate = ref(new Date())
+    const maxDate = ref(new Date(new Date().setMonth(new Date().getMonth() + 6)))
     const phoneNumber = ref('')
+    const fullyBookedDates = ref([])
 
-    // Phone validation function
-    const validatePhone = (event) => {
-      // Remove all non-numeric characters
-      let value = event.target.value.replace(/\D/g, '')
-
-      // Format as XX XXX XX XX
-      if (value.length > 0) {
-        if (value.length <= 2) {
-          phoneNumber.value = value
-        } else if (value.length <= 5) {
-          phoneNumber.value = value.slice(0, 2) + ' ' + value.slice(2)
-        } else if (value.length <= 7) {
-          phoneNumber.value = value.slice(0, 2) + ' ' + value.slice(2, 5) + ' ' + value.slice(5)
-        } else {
-          phoneNumber.value =
-            value.slice(0, 2) +
-            ' ' +
-            value.slice(2, 5) +
-            ' ' +
-            value.slice(5, 7) +
-            ' ' +
-            value.slice(7, 9)
-        }
-      } else {
-        phoneNumber.value = ''
-      }
-
-      // Update the store with full number including +41
+    const validatePhone = (e) => {
+      let val = e.target.value.replace(/\D/g, '')
+      phoneNumber.value =
+        val.length <= 2
+          ? val
+          : val.length <= 5
+            ? `${val.slice(0, 2)} ${val.slice(2)}`
+            : val.length <= 7
+              ? `${val.slice(0, 2)} ${val.slice(2, 5)} ${val.slice(5)}`
+              : `${val.slice(0, 2)} ${val.slice(2, 5)} ${val.slice(5, 7)} ${val.slice(7, 9)}`
       bookingStore.updateBookingField('phone', phoneNumber.value ? '+41 ' + phoneNumber.value : '')
     }
 
-    // Watch for changes to sync with store
-    watch(phoneNumber, (newValue) => {
-      bookingStore.updateBookingField('phone', newValue ? '+41 ' + newValue : '')
+    watch(phoneNumber, (val) => {
+      bookingStore.updateBookingField('phone', val ? '+41 ' + val : '')
     })
+
+    const fetchFullyBookedDates = async () => {
+      if (!booking.value.barber_id) return
+      const { data } = await supabase
+        .from('availability')
+        .select('date, hour')
+        .eq('barber_id', booking.value.barber_id)
+        .eq('is_available', false)
+
+      if (!data) return
+
+      const grouped = data.reduce((acc, { date, hour }) => {
+        acc[date] = acc[date] || []
+        acc[date].push(hour)
+        return acc
+      }, {})
+
+      for (const dateStr in grouped) {
+        const slots = await fetchAvailableHours(booking.value.barber_id, dateStr)
+        if (slots.length === 0) fullyBookedDates.value.push(new Date(dateStr))
+      }
+    }
 
     const loadSlots = async () => {
       if (!booking.value.barber_id || !booking.value.date) return
-
       const slots = await fetchAvailableHours(booking.value.barber_id, booking.value.date)
       bookingStore.setAvailableSlots(slots)
-
-      console.log('BARBER ID:', booking.value.barber_id)
     }
 
-    const goBack = () => {
-      router.push('/booking/barber-selection')
-    }
+    onMounted(() => {
+      fetchFullyBookedDates()
+    })
+
+    const goBack = () => router.push('/booking/services')
 
     const validateAndContinue = () => {
-      // Validate each field
-      if (!booking.value.firstName) {
-        bookingStore.showValidation('Please enter your first name.')
-        return
-      }
-      if (!booking.value.lastName) {
-        bookingStore.showValidation('Please enter your last name.')
-        return
-      }
-      if (!booking.value.email) {
-        bookingStore.showValidation('Please enter your email address.')
-        return
-      }
-      // Email format validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(booking.value.email)) {
-        bookingStore.showValidation('Please enter a valid email address (example: name@email.com)')
-        return
-      }
-      if (
-        !booking.value.phone ||
-        booking.value.phone === '+41 ' ||
-        booking.value.phone.replace(/[^0-9]/g, '').length < 11
-      ) {
-        bookingStore.showValidation('Please enter a valid Swiss phone number.')
-        return
-      }
-      if (!booking.value.date) {
-        bookingStore.showValidation('Please select a date for your appointment.')
-        return
-      }
-      if (availableSlots.value.length === 0) {
-        bookingStore.showValidation(
-          'No time slots are available for the selected date. Please choose a different date.',
-        )
-        return
-      }
-      if (!booking.value.timeSlot) {
-        bookingStore.showValidation('Please select a time slot from the available options.')
-        return
-      }
+      const b = booking.value
+      const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-      // All validation passed
-      router.push('/booking/services')
+      if (!b.firstName) return bookingStore.showValidation('Enter your first name.')
+      if (!b.lastName) return bookingStore.showValidation('Enter your last name.')
+      if (!b.email) return bookingStore.showValidation('Enter your email.')
+      if (!validEmail.test(b.email)) return bookingStore.showValidation('Invalid email.')
+      if (!b.phone || b.phone === '+41 ' || b.phone.replace(/[^0-9]/g, '').length < 11)
+        return bookingStore.showValidation('Enter valid Swiss phone number.')
+      if (!b.date) return bookingStore.showValidation('Select appointment date.')
+      if (availableSlots.value.length === 0)
+        return bookingStore.showValidation('No slots for this date.')
+      if (!b.timeSlot) return bookingStore.showValidation('Select a time slot.')
+
+      router.push('/booking/confirmation')
     }
 
     return {
       booking,
       availableSlots,
       minDate,
-      isFormComplete,
-      loadSlots,
-      goBack,
-      validateAndContinue,
+      maxDate,
+      fullyBookedDates,
       phoneNumber,
       validatePhone,
+      loadSlots,
+      isFormComplete,
+      validateAndContinue,
+      goBack,
     }
   },
 })
